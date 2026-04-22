@@ -36,26 +36,47 @@ body: (the full markdown below, exactly as written)
 
 ## Commands
 
-- [ ] **weekly_progress** — Weekly sprint progress update → posts to PIF Weekly Progress 2026
-- [ ] **sprint_summary** — Current sprint metrics (ticket counts by status, member, epic)
-- [ ] **board_report** — What each team member has done this week (from ticket comments)
-- [ ] **ticket_quality** — Audit: which tickets are missing description or acceptance criteria
-- [ ] **fix_descriptions** — Generate AI-drafted descriptions + AC for tickets listed below
-- [ ] **browse_folder** — Browse team Confluence space and summarize page structure
+| Command | What it does | Claude tokens |
+|---|---|---|
+| **weekly_progress** | Weekly sprint progress update → posts to PIF Weekly Progress 2026 | ~5k |
+| **sprint_summary** | Current sprint metrics: ticket counts by status, member, and epic | 0 |
+| **board_report** | What each team member did this week, based on ticket comments | ~1k |
+| **ticket_quality** | Audit which tickets are missing description or acceptance criteria | ~1k |
+| **fix_tickets** | AI-drafted descriptions + AC for specific tickets (keys listed below) | ~1k |
+| **browse_folder** | Browse team Confluence space and summarize page structure | ~2k |
+
+- [ ] **weekly_progress**
+- [ ] **sprint_summary**
+- [ ] **board_report**
+- [ ] **ticket_quality**
+- [ ] **fix_tickets**
+- [ ] **browse_folder**
+
+---
+
+## Additional Tasks
+
+_Write one task per line as a bullet point, then run `./run_command.sh`. Tasks are executed by Claude (with full Jira + Confluence access) and cleared automatically after running. Results are posted back to this page as a comment. If a task is repeatable, Claude will add it as a checkbox above._
+
+-
 
 ---
 
 ## Configuration
 
-**Ticket quality scope:** `sprint`  _(options: sprint | backlog | all)_
+**Ticket quality scope:** `sprint` _(options: sprint | backlog | all)_
+
 **Board report — days back:** `7`
-**Fix descriptions — ticket keys:** _(paste keys here, comma-separated, e.g. DCPFS-12345, DCPFS-67890)_
+
+**Fix tickets — ticket keys:** _(paste keys here, comma-separated, e.g. DCPFS-12345, DCPFS-67890)_
+
 **Create page — parent ID:** `COMMAND_PAGE_PARENT_ID_PLACEHOLDER`
 
 ---
 
-_Run: `./run_command.sh` — script reads this page and executes all checked commands in order._
-_To run one command directly: `./run_command.sh --command sprint_summary`_
+_Run `./run_command.sh` — reads this page and executes all checked commands in order._
+
+_Run a single command directly: `./run_command.sh --command sprint_summary`_
 ```
 
 ---
