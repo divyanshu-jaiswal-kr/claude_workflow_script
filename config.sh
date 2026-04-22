@@ -21,3 +21,12 @@ STORY_POINTS_FIELD="customfield_10032"
 EPIC_LINK_FIELD="customfield_10014"  # Epic Link (use "Epic Link" in JQL)
 
 BOARD_ID="4896"
+
+# ── Teams Bot ─────────────────────────────────────────────────────────────────
+# 1. Teams channel → ··· → Connectors → Incoming Webhook → create → copy URL below
+TEAMS_INCOMING_WEBHOOK_URL=""
+# 2. Teams → Apps → Outgoing Webhooks → create → copy HMAC secret below
+TEAMS_WEBHOOK_SECRET=""
+# 3. Port the bot listens on (default 3978)
+TEAMS_BOT_PORT="3978"
+# ─────────────────────────────────────────────────────────────────────────────

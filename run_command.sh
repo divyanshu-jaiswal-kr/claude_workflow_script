@@ -12,6 +12,7 @@
 #   ./run_command.sh --command weekly_progress
 #   ./run_command.sh --setup                   # one-time: create command center page
 #   ./run_command.sh --dry-run                 # print what would run, no execution
+#   ./run_command.sh --teams                   # start Teams bot (runs until Ctrl+C)
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -28,6 +29,8 @@ source "$SCRIPT_DIR/config.sh"
 export COMMAND_PAGE_ID COMMAND_PAGE_PARENT_ID WEEKLY_PAGE_ID CLOUD_ID
 export PROJECT SPACE SPACE_ID EPIC_KEYS
 export AC_FIELD SPRINT_FIELD STORY_POINTS_FIELD EPIC_LINK_FIELD BOARD_ID
+export TEAMS_INCOMING_WEBHOOK_URL TEAMS_WEBHOOK_SECRET TEAMS_BOT_PORT
+export CLAUDE_BIN
 
 # Binary checks
 CLAUDE_BIN="$(command -v claude 2>/dev/null || true)"
@@ -223,15 +226,29 @@ except: print('sprint')
 COMMAND=""
 DO_SETUP=false
 DRY_RUN=false
+DO_TEAMS=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --setup)   DO_SETUP=true; shift ;;
     --command) COMMAND="${2:-}"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
+    --teams)   DO_TEAMS=true; shift ;;
     *) echo "Unknown flag: $1" >&2; exit 1 ;;
   esac
 done
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Teams bot mode ────────────────────────────────────────────────────────────
+if $DO_TEAMS; then
+  echo "Starting PIF Teams bot on port ${TEAMS_BOT_PORT:-3978}..."
+  if ! python3 -c "import flask" &>/dev/null; then
+    echo "Installing Flask..."
+    pip3 install flask --quiet
+  fi
+  export CLAUDE_BIN
+  exec python3 "$SCRIPT_DIR/scripts/teams_bot.py"
+fi
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Dry-run mode ──────────────────────────────────────────────────────────────

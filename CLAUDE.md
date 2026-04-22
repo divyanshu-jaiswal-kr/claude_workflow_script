@@ -30,8 +30,16 @@ Run these with `python3 scripts/<name>` from the project root. Each writes a str
 
 ## Output format
 
-Always write valid JSON to the output file path specified in the prompt.
-Do not post to Confluence directly unless the prompt explicitly says to (custom tasks excepted).
+**Scheduled commands** (board_report, ticket_quality, fix_tickets): write valid JSON to the output file specified in the prompt. Do not post to Confluence directly unless the prompt says to.
+
+**Teams tasks** (prompts/teams_task.md): respond with ONLY a JSON block:
+```json
+{ "answer": "short Teams message", "confluence_url": "...", "page_title": "..." }
+```
+- Inline answer (no page) for facts, counts, short lists ≤ 400 chars
+- Confluence page + link for reports, tables, audits
+
+**Custom tasks** (prompts/custom_task.md): post result as a footer comment on the command page. Create a separate Confluence page only if the task explicitly asks for a document.
 
 ## Style
 
