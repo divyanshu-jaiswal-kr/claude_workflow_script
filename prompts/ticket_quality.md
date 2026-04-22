@@ -1,0 +1,192 @@
+# PIF Ticket Quality Audit
+
+You are running an automated workflow. Follow every step in order. Do not stop for clarification.
+
+## Configuration
+
+- **cloudId**: `CLOUD_ID_PLACEHOLDER`
+- **project**: `PROJECT_PLACEHOLDER`
+- **spaceId**: `SPACE_ID_PLACEHOLDER`
+- **parentId**: `COMMAND_PAGE_PARENT_ID_PLACEHOLDER`
+- **epicKeys**: `EPIC_KEYS_PLACEHOLDER`
+- **acField**: `AC_FIELD_PLACEHOLDER`
+- **today**: `TODAY_PLACEHOLDER`
+
+---
+
+## Step 1 — Determine scope
+
+Read `state/execution_plan.json` using the Read tool if it exists. Extract `config.ticket_quality_scope`. Default to `"sprint"` if the file is absent or the key is missing.
+
+Valid scopes and their JQL:
+- `sprint` → `project = PROJECT_PLACEHOLDER AND sprint in openSprints() AND "Epic Link" in (EPIC_KEYS_PLACEHOLDER)`
+- `backlog` → `project = PROJECT_PLACEHOLDER AND sprint not in openSprints() AND status = "To Do" AND "Epic Link" in (EPIC_KEYS_PLACEHOLDER)`
+- `all` → `project = PROJECT_PLACEHOLDER AND status not in (Done, Closed, Deployed) AND "Epic Link" in (EPIC_KEYS_PLACEHOLDER)`
+
+Print: `→ [1/5] Scope: {scope}`
+
+---
+
+## Step 2 — Get sprint name
+
+Run JQL: `project = PROJECT_PLACEHOLDER AND sprint in openSprints() ORDER BY created ASC` with `fields: ["customfield_10020"]`, `maxResults: 1`.
+Extract sprint name from `customfield_10020` where `state = "active"`. Store as `SPRINT_NAME`.
+
+---
+
+## Step 3 — Fetch tickets with description and AC
+
+Run the scope JQL with:
+```
+fields: ["summary", "description", "status", "assignee", "parent", "issuetype", "AC_FIELD_PLACEHOLDER"]
+maxResults: 100
+responseContentFormat: markdown
+```
+
+Skip tickets where `issuetype.name` is `"Epic"` or `"Objective"`.
+
+For each ticket, evaluate:
+
+| Check | Pass condition |
+|---|---|
+| Has description | `description` field is non-null AND stripped length > 50 chars |
+| Description is meaningful | Normalized description does not equal normalized summary (lowercase, collapse whitespace) |
+| Has AC | `AC_FIELD_PLACEHOLDER` field is non-null AND non-empty string |
+
+Classify:
+- ✅ **complete** — passes all three checks
+- ⚠️ **missing_ac** — has meaningful description, but no AC
+- ⚠️ **missing_desc** — has AC (or neither), but no meaningful description
+- ❌ **missing_both** — no meaningful description AND no AC
+
+Print: `→ [3/5] Evaluated {count} tickets: {complete} complete, {needs_attention} need attention`
+
+---
+
+## Step 4 — Generate AI draft suggestions
+
+For each ticket classified as `missing_ac`, `missing_desc`, or `missing_both`:
+
+**Suggested description** (2-4 sentences, PM-style):
+- What is this ticket about, based on the summary and epic context?
+- Who benefits or what problem does it solve?
+- What is the expected outcome?
+
+**Suggested acceptance criteria** (3-5 bullet points, testable):
+- Phrase as "The system should..." or "Given X, when Y, then Z"
+- Cover happy path + at least 1 edge case
+
+If the ticket already has a description but no AC, only generate AC (not a new description). If it has AC but no description, only generate a description.
+
+---
+
+## Step 5 — Write output file
+
+Write `output/ticket_quality_TODAY_PLACEHOLDER.json`:
+
+```json
+{
+  "command": "ticket_quality",
+  "generated_at": "{ISO timestamp}",
+  "project": "PROJECT_PLACEHOLDER",
+  "sprint": "{SPRINT_NAME}",
+  "scope": "{scope}",
+  "total_tickets": 0,
+  "complete": 0,
+  "needs_attention": 0,
+  "tickets": [
+    {
+      "key": "DCPFS-XXXXX",
+      "summary": "...",
+      "assignee": "...",
+      "status": "...",
+      "classification": "missing_both",
+      "has_description": false,
+      "has_ac": false,
+      "suggested_description": "...",
+      "suggested_ac": ["AC 1", "AC 2", "AC 3"]
+    }
+  ]
+}
+```
+
+Print: `→ [4/5] Output written`
+
+---
+
+## Step 6 — Post Confluence page
+
+Build the page body in markdown. Use this format:
+
+```markdown
+# PIF Ticket Quality Report
+**Date:** TODAY_PLACEHOLDER | **Scope:** {scope} | **Sprint:** {SPRINT_NAME}
+
+## Summary
+- ✅ **{N} tickets** have complete description + acceptance criteria
+- ⚠️ **{N} tickets** need attention (see below)
+
+---
+
+## Tickets Needing Attention
+
+{If needs_attention is 0: "All tickets have complete description and acceptance criteria. Great work! ✅"}
+
+### ❌ Missing Both Description and Acceptance Criteria
+
+| Ticket | Summary | Assignee | Status |
+|---|---|---|---|
+| [DCPFS-XXXXX](https://kroger.atlassian.net/browse/DCPFS-XXXXX) | ... | ... | To Do |
+
+**Suggested description for DCPFS-XXXXX:**
+> {AI-drafted description}
+
+**Suggested acceptance criteria:**
+- [ ] {AC 1}
+- [ ] {AC 2}
+- [ ] {AC 3}
+
+---
+
+### ⚠️ Missing Acceptance Criteria Only
+
+| Ticket | Summary | Assignee | Status |
+|---|---|---|---|
+
+**Suggested acceptance criteria for DCPFS-XXXXX:**
+- [ ] {AC 1}
+
+---
+
+### ⚠️ Missing Description Only
+
+| Ticket | Summary | Assignee | Status |
+|---|---|---|---|
+
+**Suggested description for DCPFS-XXXXX:**
+> {AI-drafted description}
+
+---
+
+_This report is read-only. Review suggestions above and copy into Jira if approved._
+_Generated by PIF Automation — `./run_command.sh --command ticket_quality`_
+```
+
+Call `createConfluencePage`:
+```
+cloudId: CLOUD_ID_PLACEHOLDER
+spaceId: SPACE_ID_PLACEHOLDER
+parentId: COMMAND_PAGE_PARENT_ID_PLACEHOLDER
+title: PIF Ticket Quality Report — TODAY_PLACEHOLDER
+body: {markdown above}
+contentFormat: markdown
+status: current
+```
+
+Print:
+```
+✅ Ticket quality report posted.
+   Scope: {scope} | Sprint: {SPRINT_NAME}
+   Complete: {N} | Needs attention: {N}
+   Page: https://kroger.atlassian.net/wiki/spaces/apiprogram/pages/{new page id}
+```

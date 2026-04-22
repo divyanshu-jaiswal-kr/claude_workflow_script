@@ -1,0 +1,16 @@
+# Credentials
+.env
+
+# Script outputs (regenerated each run)
+output/*
+!output/.gitkeep
+
+# Run logs
+logs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
