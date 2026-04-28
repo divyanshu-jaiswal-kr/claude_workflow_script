@@ -1,10 +1,17 @@
-# PIF Weekly Confluence Update — Automated Workflow
+# PIF Confluence Automation — Automated Workflow
 
-Automatically generates weekly sprint progress updates for the PIF team and publishes them to the [PIF Weekly Progress 2026](https://kroger.atlassian.net/wiki/spaces/apiprogram/pages/514261050/PIF+Weekly+Progress+2026) Confluence page every Friday at 18:00.
+Two automated workflows keep the [PIF Weekly Progress 2026](https://kroger.atlassian.net/wiki/spaces/apiprogram/pages/514261050/PIF+Weekly+Progress+2026) Confluence page up to date:
+
+| Workflow | Script | Schedule | What it does |
+|---|---|---|---|
+| Weekly Progress Update | `run_weekly_update.sh` | Every Friday at 18:00 | Prepends a new sprint progress table (Progress / Next Steps / Blockers) |
+| Next Sprint Next Steps | `run_next_steps_update.sh` | Every Tuesday at 09:00 | Updates the Next Steps column of the latest table with open tickets from the upcoming sprint |
 
 ---
 
-## Overview
+## Workflow 1 — Weekly Progress Update (`run_weekly_update.sh`)
+
+Runs every **Friday at 18:00**. Prepends a new formatted progress table to the Confluence page.
 
 Each Friday, the workflow:
 1. Fetches the active sprint and this week's updated PIF tickets from Jira
@@ -22,6 +29,27 @@ The output table looks like:
 | --- | --- | --- | --- | --- |
 | Catalog V2_Q1 Iterative tech enhancements | ... | ... | ... |   |
 | Working PoC for Catalog bulk data delivery | ... | ... | ... |   |
+```
+
+---
+
+## Workflow 2 — Next Sprint Next Steps (`run_next_steps_update.sh`)
+
+Runs every **Tuesday at 09:00**. Keeps the Next Steps column of the latest table populated with open tickets queued for the upcoming sprint.
+
+Each Tuesday, the workflow:
+1. Finds the active sprint (e.g., `DCP 2026Q1.6`) and derives the next sprint name (`DCP 2026Q1.7`)
+2. Fetches all `Open` tickets in that next sprint scoped to the 4 PIF epics
+3. Groups tickets by service (one ticket summary per line)
+4. Replaces only the **Next Steps column** in the most recent Confluence table — Progress and Blockers are left untouched
+5. Exits cleanly with no changes if the next sprint has not yet been created in Jira
+
+The Next Steps cells are updated in place:
+
+```
+| Bulk data PoC | <existing progress> | Implement POST /uploads API
+Enable Azure blob storage access
+Build bronze delta table jobs for Products | <existing blockers> |
 ```
 
 ---
@@ -77,49 +105,64 @@ The files in `scripts/` implement the same logic using direct REST API calls and
 ### 1. Make scripts executable
 
 ```bash
-chmod +x run_weekly_update.sh setup_cron.sh
+chmod +x run_weekly_update.sh run_next_steps_update.sh setup_cron.sh
 ```
 
 ### 2. Test manually
 
 ```bash
-# Dry run — logs dates and resolved prompt to logs/, does not execute Claude or touch Confluence
-./run_weekly_update.sh --dry-run
+# Weekly Progress Update
+./run_weekly_update.sh --dry-run   # preview resolved prompt, no API calls
+./run_weekly_update.sh             # full run
 
-# Full run (MCP handles all Jira + Confluence API calls)
-./run_weekly_update.sh
+# Next Sprint Next Steps
+./run_next_steps_update.sh --dry-run   # preview resolved prompt, no API calls
+./run_next_steps_update.sh --force     # full run regardless of day
 ```
 
-### 3. Install the scheduler (macOS — recommended)
+### 3. Install schedulers (macOS — recommended)
 
-Use **launchd** (`setup_launchd.sh`) — it is the native macOS scheduler and is more reliable than cron. It:
-- Runs as your user with the correct `HOME` and `PATH`
-- Persists across reboots
-- Requires no terminal or manual start after installation
+Both workflows use **launchd** — the native macOS scheduler. Each script manages its own launchd agent via `--install` / `--uninstall`.
+
+#### Weekly Progress Update (Friday 18:00)
 
 ```bash
 ./setup_launchd.sh
-```
 
-This installs a LaunchAgent that fires every Friday at 18:00.
-
-```bash
-# Verify it's loaded
+# Verify
 launchctl list | grep com.pif.weekly-confluence-update
 
-# Run it right now (without waiting for Friday)
+# Trigger immediately
 launchctl start com.pif.weekly-confluence-update
 
-# Remove it
+# Remove
 ./setup_launchd.sh --unload
+```
+
+#### Next Sprint Next Steps (Tuesday 09:00)
+
+```bash
+./run_next_steps_update.sh --install
+
+# Verify
+launchctl list | grep com.pif.next-steps-update
+
+# Trigger immediately
+launchctl start com.pif.next-steps-update
+
+# Remove
+./run_next_steps_update.sh --uninstall
 ```
 
 ### 3b. Alternative: cron (Linux / non-macOS)
 
 ```bash
-./setup_cron.sh          # install
+./setup_cron.sh          # install weekly update cron
 ./setup_cron.sh --remove # remove
 crontab -l               # verify
+
+# For the Tuesday next-steps update, add manually:
+# 0 9 * * 2 /path/to/run_next_steps_update.sh --force >> /path/to/logs/next_steps_cron.log 2>&1
 ```
 
 ---
@@ -127,30 +170,41 @@ crontab -l               # verify
 ## File Structure
 
 ```
-workflow_setup_claude/
-├── README.md                    ← this file
-├── run_weekly_update.sh         ← main orchestrator script
-├── setup_launchd.sh             ← macOS LaunchAgent installer (recommended)
-├── setup_cron.sh                ← cron installer (Linux / alternative)
-├── weekly_update_prompt.md      ← Claude synthesis instructions
-├── requirements.txt             ← Python dependencies
-├── .env.example                 ← credential template
-├── .env                         ← your credentials (gitignored)
+workflow_setup_claude_2/
+├── README.md                        ← this file
+│
+├── run_weekly_update.sh             ← Workflow 1: Friday progress update orchestrator
+├── weekly_update_prompt.md          ← Claude prompt for Workflow 1
+├── setup_launchd.sh                 ← macOS LaunchAgent installer for Workflow 1 (Fri 18:00)
+├── setup_cron.sh                    ← cron installer for Workflow 1 (Linux / alternative)
+│
+├── run_next_steps_update.sh         ← Workflow 2: Tuesday Next Steps orchestrator
+├── next_steps_prompt.md             ← Claude prompt for Workflow 2
+│
+├── requirements.txt                 ← Python dependencies
+├── .env.example                     ← credential template
+├── .env                             ← your credentials (gitignored)
 ├── .gitignore
 │
-├── scripts/
-│   ├── fetch_jira.py            ← Step 1: Jira data fetch
-│   ├── fetch_confluence.py      ← Step 2: Confluence page fetch + parse
-│   └── update_confluence.py     ← Step 4: Confluence page update
+├── scripts/                         ← standalone utilities (not used in automated runs)
+│   ├── fetch_jira.py
+│   ├── fetch_confluence.py
+│   ├── fetch_sprint.py
+│   ├── fetch_board.py
+│   ├── fetch_backlog.py
+│   ├── update_confluence.py
+│   └── ...
 │
-├── output/                      ← intermediate files (gitignored, regenerated each run)
-│   ├── sprint_info.json         ← sprint name + formatted week dates
-│   ├── tickets_by_epic.json     ← tickets grouped by parent epic
-│   ├── last_week.json           ← parsed rows from previous week's Confluence table
-│   └── new_section.json         ← synthesized section ready to publish
+├── output/                          ← intermediate files (gitignored, regenerated each run)
+│   ├── sprint_info.json             ← sprint name + formatted week dates
+│   ├── tickets_by_epic.json         ← tickets grouped by parent epic
+│   ├── last_week.json               ← parsed rows from previous week's Confluence table
+│   └── new_section.json             ← synthesized section ready to publish
 │
-└── logs/                        ← run logs (gitignored)
-    └── weekly_update_YYYY-MM-DD_HH-MM-SS.log
+└── logs/                            ← run logs (gitignored)
+    ├── weekly_update_YYYY-MM-DD_HH-MM-SS.log
+    ├── next_steps_YYYY-MM-DD_HH-MM-SS.log
+    └── next_steps_launchd.log
 ```
 
 ---
@@ -194,19 +248,21 @@ The MCP `updateConfluencePage` tool accepts markdown. New content is prepended t
 | `No open sprint found` | Sprint closed between runs | Check Jira board; verify `openSprints()` returns results |
 | `0 tickets updated since {date}` | No activity this week | Claude auto-falls back to full sprint data |
 | Epic missing from output | Jira text search missed underscore name | Add key to the fallback list in `weekly_update_prompt.md` Step 2 |
-| Confluence page not updated | Claude timed out or MCP call failed | Check `logs/` for the run; re-run `./run_weekly_update.sh` manually |
+| Confluence page not updated | Claude timed out or MCP call failed | Check `logs/` for the run; re-run manually |
 | MCP auth error | Atlassian MCP plugin not configured | Ensure `claude` has the Atlassian plugin active; test with `claude` interactively |
+| `Next sprint not yet created` | Next sprint sprint board not set up in Jira | Normal — script exits cleanly; no action needed |
+| Next Steps not updated on Tuesday | Jira uses a different "open" status name | Check status names in the sprint; update Step 3 JQL in `next_steps_prompt.md` |
 
-### Run manually (full workflow)
+### Run manually
 
 ```bash
-cd workflow_setup_claude
+# Workflow 1 — Weekly Progress Update
+./run_weekly_update.sh --dry-run   # preview only
+./run_weekly_update.sh             # full run (Friday only)
 
-# Dry run — logs to logs/, does not execute Claude
-./run_weekly_update.sh --dry-run
-
-# Full run
-./run_weekly_update.sh
+# Workflow 2 — Next Sprint Next Steps
+./run_next_steps_update.sh --dry-run   # preview only
+./run_next_steps_update.sh --force     # full run (any day)
 ```
 
 ### Check output files after a run
@@ -218,12 +274,14 @@ cat output/last_week.json
 cat output/new_section.json
 ```
 
-### Rerun only the Claude synthesis step
+### Rerun only the Claude step (skip shell orchestration)
 
 ```bash
-cd workflow_setup_claude
-# Assumes output/sprint_info.json, tickets_by_epic.json, last_week.json already exist
+# Workflow 1
 claude --dangerously-skip-permissions -p "$(cat weekly_update_prompt.md)"
+
+# Workflow 2
+claude --dangerously-skip-permissions -p "$(sed "s/TODAY_PLACEHOLDER/$(date +%Y-%m-%d)/g" next_steps_prompt.md)"
 ```
 
 ---
@@ -250,10 +308,13 @@ Or after a run, read the epic keys from output:
 python3 -c "import json; d=json.load(open('output/tickets_by_epic.json')); [print(v['epic_key'], k) for k,v in d.items()]"
 ```
 
+To activate full automation — two commands, one time:
+
 ```bash
+chmod +x run_weekly_update.sh run_next_steps_update.sh setup_launchd.sh
 
-To activate full automation — one command, one time:
-
-chmod +x setup_launchd.sh && ./setup_launchd.sh
-After that: nothing. It runs every Friday at 18:00, logs to logs/, and publishes to Confluence automatically.
+./setup_launchd.sh                        # Workflow 1: every Friday 18:00
+./run_next_steps_update.sh --install      # Workflow 2: every Tuesday 09:00
 ```
+
+After that: nothing. Both workflows run on schedule, log to `logs/`, and publish to Confluence automatically.
