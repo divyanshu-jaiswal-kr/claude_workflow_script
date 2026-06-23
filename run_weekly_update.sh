@@ -5,15 +5,17 @@
 # Python scripts in scripts/ are available for local file processing only.
 #
 # Usage:
-#   ./run_weekly_update.sh              # normal automated run
-#   ./run_weekly_update.sh --dry-run    # print the resolved prompt, do not execute
+#   ./run_weekly_update.sh                                    # normal automated run (uses today's date + active sprint)
+#   ./run_weekly_update.sh --dry-run                          # print the resolved prompt, do not execute
+#   ./run_weekly_update.sh --week-end YYYY-MM-DD              # use a custom end date (week start computed from it)
+#   ./run_weekly_update.sh --sprint "DCP 2026Q2.2"            # override sprint name (bypasses openSprints() JQL)
+#   ./run_weekly_update.sh --week-end 2026-06-22 --sprint "DCP 2026Q2.2"   # both overrides together
 
 set -euo pipefail
 
 # ── Ensure claude is findable regardless of how this script is invoked ────────
-# cron and launchd start with a minimal PATH; add all common install locations.
 export PATH="$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:$PATH"
-export HOME="${HOME:-/Users/$(whoami)}"   # launchd may not set HOME
+export HOME="${HOME:-/Users/$(whoami)}"
 # ─────────────────────────────────────────────────────────────────────────────
 
 CLAUDE_BIN="$(command -v claude 2>/dev/null || true)"
@@ -34,29 +36,60 @@ if [[ ! -f "$PROMPT_FILE" ]]; then
   exit 1
 fi
 
-# ── Compute week date range (last Monday → today) ────────────────────────────
-# macOS date: %u = 1 (Mon) … 7 (Sun)
-DOW=$(date +%u)
-DAYS_SINCE_MON=$(( DOW - 1 ))
-WEEK_START=$(date -v -${DAYS_SINCE_MON}d +%Y-%m-%d)
-WEEK_END=$(date +%Y-%m-%d)
+# ── Parse optional flags ──────────────────────────────────────────────────────
+CUSTOM_WEEK_END=""
+SPRINT_OVERRIDE=""
+DRY_RUN=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run)    DRY_RUN=true; shift ;;
+    --week-end)   CUSTOM_WEEK_END="$2"; shift 2 ;;
+    --sprint)     SPRINT_OVERRIDE="$2"; shift 2 ;;
+    *)            shift ;;
+  esac
+done
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Substitute date placeholders into the prompt
+# ── Compute week date range ───────────────────────────────────────────────────
+# macOS date: %u = 1 (Mon) … 7 (Sun)
+if [[ -n "$CUSTOM_WEEK_END" ]]; then
+  WEEK_END="$CUSTOM_WEEK_END"
+  # Compute the Monday of the week containing WEEK_END
+  DOW=$(date -j -f "%Y-%m-%d" "$WEEK_END" +%u)
+  DAYS_SINCE_MON=$(( DOW - 1 ))
+  if [[ $DAYS_SINCE_MON -eq 0 ]]; then
+    # WEEK_END is Monday — use the previous Monday as week start (full 7-day window)
+    WEEK_START=$(date -j -v -7d -f "%Y-%m-%d" "$WEEK_END" +%Y-%m-%d)
+  else
+    WEEK_START=$(date -j -v -${DAYS_SINCE_MON}d -f "%Y-%m-%d" "$WEEK_END" +%Y-%m-%d)
+  fi
+else
+  DOW=$(date +%u)
+  DAYS_SINCE_MON=$(( DOW - 1 ))
+  WEEK_START=$(date -v -${DAYS_SINCE_MON}d +%Y-%m-%d)
+  WEEK_END=$(date +%Y-%m-%d)
+fi
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Substitute placeholders into the prompt ───────────────────────────────────
 RESOLVED_PROMPT=$(sed \
   -e "s/WEEK_START_PLACEHOLDER/$WEEK_START/g" \
   -e "s/WEEK_END_PLACEHOLDER/$WEEK_END/g" \
+  -e "s|SPRINT_OVERRIDE_PLACEHOLDER|$SPRINT_OVERRIDE|g" \
   "$PROMPT_FILE")
+# ─────────────────────────────────────────────────────────────────────────────
 
-if [[ "${1:-}" == "--dry-run" ]]; then
+if [[ "$DRY_RUN" == true ]]; then
   {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] DRY RUN — workflow not executed"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Week start (last Monday): $WEEK_START"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Week end   (today):       $WEEK_END"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Week start: $WEEK_START"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Week end:   $WEEK_END"
+    [[ -n "$SPRINT_OVERRIDE" ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] Sprint override: $SPRINT_OVERRIDE"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Prompt file: $PROMPT_FILE"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Log file:    $LOG_FILE"
     echo ""
-    echo "=== Resolved prompt (with dates substituted) ==="
+    echo "=== Resolved prompt ==="
     echo "$RESOLVED_PROMPT"
   } | tee -a "$LOG_FILE"
   exit 0
@@ -66,6 +99,7 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"; }
 
 log "Starting PIF weekly Confluence update (automated)"
 log "Week: $WEEK_START → $WEEK_END"
+[[ -n "$SPRINT_OVERRIDE" ]] && log "Sprint override: $SPRINT_OVERRIDE"
 log "Log: $LOG_FILE"
 
 # Write resolved prompt to a temp file — avoids quoting issues inside the wrapper script.

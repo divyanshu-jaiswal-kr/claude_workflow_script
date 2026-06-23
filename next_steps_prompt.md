@@ -91,9 +91,9 @@ pageId: 514261050
 contentFormat: markdown
 ```
 
-Store the full body as `CURRENT_BODY`.
+**CRITICAL:** Store the ENTIRE page body exactly as returned — every line, every section, every previous sprint entry. Do not truncate or summarise. Store as `CURRENT_BODY`.
 
-**Print:** `→ [4/7] Confluence page fetched`
+**Print:** `→ [4/7] Confluence page fetched ({character count} chars)`
 
 If this fails → print `ERROR: Could not fetch Confluence page` and stop.
 
@@ -104,37 +104,50 @@ If this fails → print `ERROR: Could not fetch Confluence page` and stop.
 For each of the 4 services, build the replacement text for the Next Steps cell:
 
 - Take all ticket summaries for that service from `TICKETS_BY_SERVICE`.
-- Format: one summary per line — join with `\n` (a literal newline inside the cell).
-- If a service has no open tickets in `NEXT_SPRINT`, produce an empty string `""`.
+- Format: each ticket summary on its own line, separated by `<br>` — this renders as a clean individual line per ticket in Confluence with proper visual spacing.
+- Do NOT join tickets into a paragraph or run them together as one sentence.
+- **If a service has no open tickets in `NEXT_SPRINT`, do NOT replace its Next Steps cell at all — leave the existing content untouched.**
 
 Example output for a service with 3 tickets:
+```
+Implement POST /uploads API<br>Enable Azure blob storage access<br>Arrive at file meta table schema
+```
+
+This renders in Confluence as:
 ```
 Implement POST /uploads API
 Enable Azure blob storage access
 Arrive at file meta table schema
 ```
 
-**Print:** `→ [5/7] Next Steps content built for {service count} services`
+**Print:** `→ [5/7] Next Steps content built for {service count} services ({N} cells will be updated, others left unchanged)`
 
 ---
 
-## Step 6: Update First Table in Page Body
+## Step 6: Update First Table in Page Body — Preserve All History
 
-Find the **first markdown table** in `CURRENT_BODY` — this is always the most recent week's entry. Its header row is `| Service | Progress | Next Steps | Blocker/ Targets |`.
+**CRITICAL:** `UPDATED_BODY` must be a copy of `CURRENT_BODY` with only the Next Steps cells of the first table modified. Every other line — all previous sprint sections, all other tables, all history — must be preserved byte-for-byte.
 
-For each data row in that table:
-- Check if the `Service` cell matches one of the 4 service labels (case-insensitive, partial match ok).
-- If it matches, **replace only the `Next Steps` cell** (column index 2, 0-based) with the content built in Step 5.
-- Leave `Progress` and `Blocker/ Targets` columns untouched.
-- If a service row is not found in the table, skip it silently.
+Steps:
+1. Locate the **first markdown table** in `CURRENT_BODY` (header row contains `| Service | Progress | Next Steps | Blocker/ Targets |`) — this is the most recent week's entry.
+2. For each data row in that first table only:
+   - Check if the `Service` cell matches one of the 4 service labels (case-insensitive, partial match ok).
+   - If it matches AND that service has replacement content from Step 5, **replace only the `Next Steps` cell** (column index 2, 0-based).
+   - If the service has no replacement content (no open tickets), **leave the cell exactly as-is**.
+   - Leave `Progress` and `Blocker/ Targets` columns untouched in all rows.
+3. Everything outside the first table (all previous sprints, all other content) is copied verbatim — do not touch it.
 
-Store the modified body as `UPDATED_BODY`.
+Store the result as `UPDATED_BODY`. Its length must be close to `CURRENT_BODY`'s length (only the Next Steps text changed).
 
-**Print:** `→ [6/7] Next Steps cells updated in page body`
+**Before continuing:** Verify that `UPDATED_BODY` contains multiple sprint sections (not just the first table). If it appears truncated, print `ERROR: Body truncation detected — aborting to protect page history` and stop.
+
+**Print:** `→ [6/7] Next Steps cells updated ({N} cells changed) | Body: {UPDATED_BODY length} chars`
 
 ---
 
 ## Step 7: Publish to Confluence
+
+**Before publishing:** Confirm that `UPDATED_BODY` is at least 80% the length of `CURRENT_BODY`. If shorter, print `ERROR: Body too short — refusing to publish to protect history` and stop.
 
 ```
 tool: updateConfluencePage

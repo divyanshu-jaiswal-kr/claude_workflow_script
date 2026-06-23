@@ -13,12 +13,17 @@ After completing each numbered step, print a one-line progress update as shown i
 - **Confluence space**: `apiprogram`
 - **Week start (Monday)**: `WEEK_START_PLACEHOLDER`
 - **Week end (today)**: `WEEK_END_PLACEHOLDER`
+- **Sprint override**: `SPRINT_OVERRIDE_PLACEHOLDER`
 
 ---
 
 ## Step 1: Fetch Sprint Name (Quarter Label)
 
-Run this JQL to get the active sprint metadata via `customfield_10020`:
+**Check if a sprint override is set first:**
+
+If `SPRINT_OVERRIDE_PLACEHOLDER` is not empty and not the literal string `SPRINT_OVERRIDE_PLACEHOLDER`, use it directly as `QUARTER_LABEL` — skip the JQL call entirely.
+
+Otherwise, run this JQL to get the active sprint:
 
 ```
 JQL: project = DCPFS AND sprint in openSprints() ORDER BY created ASC
@@ -28,7 +33,6 @@ fields: ["customfield_10020"]
 
 From the result, find the sprint in `customfield_10020` where `state = "active"`. Extract:
 - **Quarter label**: the sprint `name` field (e.g., `DCP 2026Q1.6`)
-- Ignore sprint start/end dates — use `WEEK_START_PLACEHOLDER` and `WEEK_END_PLACEHOLDER` instead
 
 Format the week range for display using ordinal suffixes:
 - `WEEK_START_PLACEHOLDER` → e.g., `13th April 2026`
@@ -54,7 +58,7 @@ Write `output/sprint_info.json`:
 → [1/9] Sprint: {QUARTER_LABEL} | Week: {WEEK_START_DISPLAY} - {WEEK_END_DISPLAY}
 ```
 
-If no active sprint is found → print `ERROR: No active sprint found in DCPFS` and stop.
+If no sprint is found and no override is set → print `ERROR: No active sprint found in DCPFS` and stop.
 
 ---
 
@@ -88,10 +92,12 @@ If epic count is 0 → print `ERROR: No PIF epics found` and stop.
 
 ## Step 3: Fetch PIF Tickets Updated This Week
 
+Use `QUARTER_LABEL` (from Step 1) as the sprint name — this correctly handles both the active sprint and any sprint override.
+
 Fetch non-Todo tickets updated since `WEEK_START_PLACEHOLDER`:
 
 ```
-JQL: project = DCPFS AND sprint in openSprints() AND status != "To Do" AND updated >= "WEEK_START_PLACEHOLDER" AND "Epic Link" in ({EPIC_KEYS comma-separated})
+JQL: project = DCPFS AND sprint = "{QUARTER_LABEL}" AND status != "To Do" AND updated >= "WEEK_START_PLACEHOLDER" AND "Epic Link" in ({EPIC_KEYS comma-separated})
 maxResults: 100
 fields: ["summary", "description", "status", "parent", "comment", "assignee", "issuetype"]
 responseContentFormat: markdown
@@ -99,7 +105,7 @@ responseContentFormat: markdown
 
 If this returns 0 results, fall back to (no date filter):
 ```
-JQL: project = DCPFS AND sprint in openSprints() AND status != "To Do" AND "Epic Link" in ({EPIC_KEYS comma-separated})
+JQL: project = DCPFS AND sprint = "{QUARTER_LABEL}" AND status != "To Do" AND "Epic Link" in ({EPIC_KEYS comma-separated})
 ```
 
 For each ticket, extract:
@@ -241,9 +247,20 @@ Compose this markdown block:
 
 Formatting rules:
 - Use the **exact** epic name from Jira (`parent.fields.summary`) as the Service value
-- No bullet points inside cells — plain sentences only
-- Keep each cell under ~300 characters
+- Each distinct update, ticket, or action item goes on its own line — separate them with `<br>` so Confluence renders each as its own line with clear visual spacing
+- Do not run multiple items into one paragraph or sentence — one item per line
+- Keep each cell under ~400 characters total
 - The `‌` character (zero-width non-joiner) and trailing blank line match the existing page format
+
+Example of correct cell formatting (Progress cell):
+```
+Loader repo separated into 4 independently deployable units<br>Validated Catalog V2 Store Layer changes<br>Deployed to prod and verified
+```
+
+Example of correct Next Steps cell:
+```
+Alert when item count drops by 25% for a location<br>Complete store layer validation<br>Run data parity testing script
+```
 
 Write `output/new_section.json`:
 ```json
