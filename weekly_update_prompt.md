@@ -149,8 +149,10 @@ contentFormat: markdown
 
 If this fails → print `ERROR: Could not fetch Confluence page` and stop.
 
+**CRITICAL:** Store the ENTIRE page body exactly as returned — this includes all previous week sections. Do not truncate. You will prepend the new section to this full body in Step 7.
+
 From the page body:
-1. **Store the full body** as `CURRENT_PAGE_BODY` — you will prepend to it in Step 7.
+1. **Store the complete, unmodified body** as `CURRENT_PAGE_BODY` — preserve every line including all previous sprints and history.
 2. **Find the first markdown table** in the body — this is last week's update.
 3. **Parse every data row** of that table (skip the header row `| Service | Progress | ...`).
    For each row extract: Service name, Progress text, Next Steps text, Blocker/Targets text.
@@ -268,7 +270,7 @@ Write `output/new_section.json`:
 
 ## Step 7: Build Updated Page Body
 
-Prepend the new section to `CURRENT_PAGE_BODY`:
+**CRITICAL:** Preserve all history. Concatenate in this exact order:
 
 ```
 {NEW_SECTION}
@@ -276,21 +278,39 @@ Prepend the new section to `CURRENT_PAGE_BODY`:
 {CURRENT_PAGE_BODY}
 ```
 
+Where:
+- `{NEW_SECTION}` is the new table you built in Step 6
+- `{CURRENT_PAGE_BODY}` is the ENTIRE original page body from Step 4 (all previous weeks, untouched)
+
+The result must include:
+- The new DCP 2026Q1.X section at the top
+- Every previous week section below it
+- All page content that existed before this run
+
 **Print after this step:**
 ```
-→ [7/9] Page body assembled
+→ [7/9] Page body assembled (NEW_SECTION prepended to {number of characters} bytes of history)
 ```
 
 ---
 
 ## Step 8: Publish to Confluence
 
+**Before publishing:** Verify that the body from Step 7 contains:
+- At least 3 previous week sections (from prior runs)
+- All "DCP 2026" headers from the original page
+- Zero truncation — the body should be several thousand characters long
+
+If the body appears truncated or too small, print `ERROR: Body truncation detected. Refusing to publish.` and stop.
+
+Publish only if the body contains all history:
+
 ```
 tool: updateConfluencePage
 cloudId: kroger.atlassian.net
 pageId: 514261050
 title: PIF Weekly Progress 2026
-body: {updated body from Step 7}
+body: {complete updated body from Step 7 — must include all history}
 contentFormat: markdown
 status: current
 ```
@@ -299,7 +319,7 @@ If a version conflict error occurs, fetch the page again to get the latest versi
 
 **Print after this step:**
 ```
-→ [8/9] Confluence page updated
+→ [8/9] Confluence page updated (body size: {bytes} including all history)
 ```
 
 ---

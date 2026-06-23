@@ -252,6 +252,7 @@ The MCP `updateConfluencePage` tool accepts markdown. New content is prepended t
 | MCP auth error | Atlassian MCP plugin not configured | Ensure `claude` has the Atlassian plugin active; test with `claude` interactively |
 | `Next sprint not yet created` | Next sprint sprint board not set up in Jira | Normal — script exits cleanly; no action needed |
 | Next Steps not updated on Tuesday | Jira uses a different "open" status name | Check status names in the sprint; update Step 3 JQL in `next_steps_prompt.md` |
+| Previous weeks deleted from page | Body not preserved when prepending | Fixed in Step 4 & 7 — Claude now explicitly preserves FULL history. Rerun script. |
 
 ### Run manually
 
