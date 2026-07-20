@@ -78,6 +78,7 @@ Collect the `key` values of all epics returned.
 - `DCPFS-27807` — Working PoC for Catalog bulk data delivery
 - `DCPFS-27772` — APIPIF Support Q1 2026
 - `DCPFS-27778` — APIPF Q1 2026 Ops/ Maintenance
+- `DCPFS-28530` — APIIPIF Support Q2 2026
 
 Merge search results with the fallback list (deduplicate). Store as `EPIC_KEYS`.
 
