@@ -9,7 +9,7 @@ After completing each numbered step, print a one-line progress update as shown.
 - **cloudId**: `kroger.atlassian.net`
 - **Jira project**: `DCPFS`
 - **Confluence page ID**: `514261050`
-- **PIF epic keys**: `DCPFS-27809`, `DCPFS-27807`, `DCPFS-27772`, `DCPFS-27778`
+- **PIF epic keys**: resolved dynamically in Step 1.5 — do not hardcode, they rotate every quarter
 - **Today**: `TODAY_PLACEHOLDER`
 
 ---
@@ -27,6 +27,23 @@ From `customfield_10020`, find the entry where `state = "active"`. Extract its `
 **Print:** `→ [1/7] Active sprint: {ACTIVE_SPRINT}`
 
 If not found → print `ERROR: No active sprint found in DCPFS` and stop.
+
+---
+
+## Step 1.5: Discover PIF Team Epics
+
+Run:
+```
+JQL: project = DCPFS AND issuetype = Epic AND status not in (Closed, Done) AND "Team[Team]" = "18d9661f-511b-4e04-8bd8-cb82f16f27e0"
+fields: ["summary", "status", "key"]
+maxResults: 30
+```
+
+This filters by the Dec-Titans (PIF) Atlassian Team field, not by name pattern — it automatically picks up the current quarter's epics without any hardcoded keys. Collect the `key` and `summary` of all epics returned and store as `EPIC_KEYS` (list of `{key, summary}`).
+
+If epic count is 0 → print `ERROR: No PIF epics found` and stop.
+
+**Print:** `→ [1.5/7] PIF epics: {count} keys — {comma-separated list}`
 
 ---
 
@@ -56,7 +73,7 @@ If 0 results → print `INFO: Next sprint {NEXT_SPRINT} not yet created in Jira.
 ## Step 3: Fetch Open PIF Tickets from Next Sprint
 
 ```
-JQL: project = DCPFS AND sprint = "{NEXT_SPRINT}" AND status = "Open" AND "Epic Link" in (DCPFS-27809, DCPFS-27807, DCPFS-27772, DCPFS-27778)
+JQL: project = DCPFS AND sprint = "{NEXT_SPRINT}" AND status = "Open" AND "Epic Link" in ({EPIC_KEYS keys, comma-separated})
 fields: ["summary", "status", "parent", "issuetype", "assignee"]
 maxResults: 100
 ```
@@ -68,13 +85,7 @@ JQL: project = DCPFS AND sprint = "{NEXT_SPRINT}" AND status = "Open"
 
 **Skip** any ticket where `issuetype.name` is `"Epic"`, `"Objective"`, or `"Task"`, or where the summary contains `"Sprint Goal"`.
 
-Group the remaining tickets by their `parent.key`. Map parent epic key → service label:
-- `DCPFS-27809` → `Catalog V2_Q1 Iterative tech enhancements`
-- `DCPFS-27807` → `Bulk data PoC`
-- `DCPFS-27772` → `APIPIF Support Q1 2026`
-- `DCPFS-27778` → `APIPF Ops/ Maintenance`
-
-Tickets with a parent key not in the above four are ignored.
+Group the remaining tickets by their `parent.key`. Use `parent.fields.summary` (the epic's actual Jira summary) as the service label — do not use a static name map. Tickets whose `parent.key` is not in `EPIC_KEYS` are ignored.
 
 Store as `TICKETS_BY_SERVICE` (map of service label → list of ticket summaries).
 
@@ -101,7 +112,7 @@ If this fails → print `ERROR: Could not fetch Confluence page` and stop.
 
 ## Step 5: Build Next Steps Cell Content Per Service
 
-For each of the 4 services, build the replacement text for the Next Steps cell:
+For each service present in `TICKETS_BY_SERVICE`, build the replacement text for the Next Steps cell:
 
 - Take all ticket summaries for that service from `TICKETS_BY_SERVICE`.
 - Format: each ticket summary on its own line, separated by `<br>` — this renders as a clean individual line per ticket in Confluence with proper visual spacing.

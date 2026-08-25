@@ -52,7 +52,7 @@ Ticket suggestions: specific and testable, not vague.
 - Cloud: `kroger.atlassian.net`
 - Confluence space: `apiprogram` | Space ID: `112984070`
 - Jira project: `DCPFS`
-- Epic keys: `DCPFS-27809`, `DCPFS-27807`, `DCPFS-27772`, `DCPFS-27778`, `DCPFS-28530`
+- PIF team (for epic discovery): `"Team[Team]" = "18d9661f-511b-4e04-8bd8-cb82f16f27e0"` (DeC-Partner Integration Framework-Titans) — do not hardcode epic keys, they rotate every quarter
 - AC field: `customfield_10147`
 - Sprint field: `customfield_10020`
 - Story Points field: `customfield_10032`

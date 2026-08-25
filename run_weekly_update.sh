@@ -125,10 +125,11 @@ EXIT_CODE=$(cat "$_EXIT_FILE" 2>/dev/null || echo "1")
 rm -f "$_PROMPT_FILE" "$_EXIT_FILE" "$_WRAPPER"
 set -e
 
-if [[ $EXIT_CODE -eq 0 ]]; then
+if [[ $EXIT_CODE -eq 0 ]] && grep -q "✅ Done\." "$LOG_FILE"; then
   log "Workflow completed successfully."
 else
-  log "ERROR: Workflow exited with code $EXIT_CODE."
+  [[ $EXIT_CODE -eq 0 ]] && EXIT_CODE=1
+  log "ERROR: Workflow did not complete (exit $EXIT_CODE, no completion marker found in log)."
 fi
 
 exit $EXIT_CODE

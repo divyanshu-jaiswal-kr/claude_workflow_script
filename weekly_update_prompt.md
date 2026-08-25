@@ -66,21 +66,12 @@ If no sprint is found and no override is set → print `ERROR: No active sprint 
 
 Run:
 ```
-JQL: project = DCPFS AND issuetype = Epic AND status not in (Closed, Done) AND (summary ~ "APIPIF" OR summary ~ "APIPF" OR summary ~ "Catalog V2" OR summary ~ "bulk data" OR summary ~ "Catalog bulk")
+JQL: project = DCPFS AND issuetype = Epic AND status not in (Closed, Done) AND "Team[Team]" = "18d9661f-511b-4e04-8bd8-cb82f16f27e0"
 fields: ["summary", "status", "key"]
-maxResults: 20
+maxResults: 30
 ```
 
-Collect the `key` values of all epics returned.
-
-**Always include these fallback keys** regardless of search results — Jira text search misses epics with underscores in their names (e.g., "Catalog V2_Q1"):
-- `DCPFS-27809` — Catalog V2_Q1 Iterative tech enhancements
-- `DCPFS-27807` — Working PoC for Catalog bulk data delivery
-- `DCPFS-27772` — APIPIF Support Q1 2026
-- `DCPFS-27778` — APIPF Q1 2026 Ops/ Maintenance
-- `DCPFS-28530` — APIIPIF Support Q2 2026
-
-Merge search results with the fallback list (deduplicate). Store as `EPIC_KEYS`.
+This filters by the Dec-Titans (PIF) Atlassian Team field, not by name pattern — it automatically picks up the current quarter's epics without any hardcoded keys. Collect the `key` values of all epics returned and store as `EPIC_KEYS`.
 
 **Print after this step:**
 ```
@@ -122,8 +113,8 @@ Group by parent epic summary into `TICKETS_BY_EPIC` (a map of epic name → list
 Write `output/tickets_by_epic.json` with this structure:
 ```json
 {
-  "Catalog V2_Q1 Iterative tech enhancements": {
-    "epic_key": "DCPFS-27809",
+  "Improve Catalog V2 platform reliability and performance by 50%": {
+    "epic_key": "DCPFS-29174",
     "tickets": [
       {
         "key": "DCPFS-XXXXX",
