@@ -21,7 +21,7 @@ After completing each numbered step, print a one-line progress update as shown i
 
 **Check if a sprint override is set first:**
 
-If `SPRINT_OVERRIDE_PLACEHOLDER` is not empty and not the literal string `SPRINT_OVERRIDE_PLACEHOLDER`, use it directly as `QUARTER_LABEL` — skip the JQL call entirely.
+Read the **Sprint override** value in the Configuration block above. If it is a non-empty sprint name, use it directly as `QUARTER_LABEL` and skip the JQL call entirely. If it is empty (the backticks contain nothing), fall through to the JQL below.
 
 Otherwise, run this JQL to get the active sprint:
 
@@ -335,7 +335,31 @@ If a version conflict error occurs, fetch the page again to get the latest versi
 
 ## Step 9: Confirm
 
-Print:
+**First, write the completion artifact.** The runner script detects success by
+looking for this file — not by reading your printed output. Write it before you
+print anything else, and only if Step 8 published successfully. If Step 8 failed
+or you stopped early, do not write it.
+
+Use the Write tool to create `output/weekly_update_status.json` (path relative to
+the project root) with exactly these keys:
+
+```json
+{
+  "status": "complete",
+  "page_id": "514261050",
+  "page_version": {version number returned by updateConfluencePage in Step 8},
+  "sprint": "{QUARTER_LABEL}",
+  "week_start": "WEEK_START_PLACEHOLDER",
+  "week_end": "WEEK_END_PLACEHOLDER",
+  "epics_covered": {count},
+  "tickets_read": {count}
+}
+```
+
+Copy `week_start` and `week_end` verbatim from the Configuration block — the
+runner matches on `week_end` to confirm the file belongs to this run.
+
+**Then print:**
 ```
 ✅ Done.
 Sprint:          {QUARTER_LABEL}

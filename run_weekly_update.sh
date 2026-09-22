@@ -28,6 +28,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROMPT_FILE="$SCRIPT_DIR/weekly_update_prompt.md"
 LOG_DIR="$SCRIPT_DIR/logs"
 LOG_FILE="$LOG_DIR/weekly_update_$(date +%Y-%m-%d_%H-%M-%S).log"
+# Completion artifact written by Step 9 of the prompt. This — not the printed
+# output — is the primary success signal.
+STATUS_FILE="$SCRIPT_DIR/output/weekly_update_status.json"
 
 mkdir -p "$LOG_DIR" "$SCRIPT_DIR/output"
 
@@ -102,6 +105,11 @@ log "Week: $WEEK_START → $WEEK_END"
 [[ -n "$SPRINT_OVERRIDE" ]] && log "Sprint override: $SPRINT_OVERRIDE"
 log "Log: $LOG_FILE"
 
+# Clear any completion artifact from a previous run so a stale file can never be
+# mistaken for this run's success.
+rm -f "$STATUS_FILE"
+RUN_START_EPOCH=$(date +%s)
+
 # Write resolved prompt to a temp file — avoids quoting issues inside the wrapper script.
 _PROMPT_FILE=$(mktemp /tmp/pif_prompt.XXXXXX.md)
 _EXIT_FILE=$(mktemp /tmp/pif_exit.XXXXXX)
@@ -125,11 +133,33 @@ EXIT_CODE=$(cat "$_EXIT_FILE" 2>/dev/null || echo "1")
 rm -f "$_PROMPT_FILE" "$_EXIT_FILE" "$_WRAPPER"
 set -e
 
-if [[ $EXIT_CODE -eq 0 ]] && grep -q "✅ Done\." "$LOG_FILE"; then
-  log "Workflow completed successfully."
+# ── Determine outcome ─────────────────────────────────────────────────────────
+# Primary signal: Step 9 writes $STATUS_FILE as its final action. A file on disk
+# survives markdown emphasis, ANSI escapes and log truncation; a prose marker
+# grepped out of the transcript does not. (On 2026-09-01 a fully successful run
+# was reported as a failure because the model printed "✅ **Done.**" rather than
+# the literal "✅ Done." the grep required.)
+#
+# Fallback: a formatting-tolerant version of that prose marker, so a run that
+# genuinely finished but skipped the artifact is a warning, not a failure.
+COMPLETION=""
+if [[ -f "$STATUS_FILE" ]] \
+   && [[ "$(stat -f %m "$STATUS_FILE" 2>/dev/null || echo 0)" -ge "$RUN_START_EPOCH" ]] \
+   && grep -q "\"week_end\"[[:space:]]*:[[:space:]]*\"$WEEK_END\"" "$STATUS_FILE"; then
+  COMPLETION="status-file"
+elif grep -qE '✅[[:space:]]*\*{0,2}Done' "$LOG_FILE"; then
+  COMPLETION="log-marker"
+fi
+
+if [[ $EXIT_CODE -ne 0 ]]; then
+  log "ERROR: Claude exited with code $EXIT_CODE — the workflow did not run to completion."
+elif [[ "$COMPLETION" == "status-file" ]]; then
+  log "Workflow completed successfully (verified via output/$(basename "$STATUS_FILE"))."
+elif [[ "$COMPLETION" == "log-marker" ]]; then
+  log "Workflow completed successfully, but output/$(basename "$STATUS_FILE") was not written — falling back to the log marker. Check Step 9 of the prompt."
 else
-  [[ $EXIT_CODE -eq 0 ]] && EXIT_CODE=1
-  log "ERROR: Workflow did not complete (exit $EXIT_CODE, no completion marker found in log)."
+  EXIT_CODE=1
+  log "ERROR: Claude exited 0 but left no completion evidence — no output/$(basename "$STATUS_FILE") for week $WEEK_END and no completion marker in the log. The Confluence page may or may not have been updated; verify page 514261050 before re-running."
 fi
 
 exit $EXIT_CODE
