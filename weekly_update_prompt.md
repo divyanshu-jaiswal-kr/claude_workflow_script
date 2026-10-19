@@ -312,6 +312,8 @@ The result must include:
 
 If the body appears truncated or too small, print `ERROR: Body truncation detected. Refusing to publish.` and stop.
 
+**Publishing is pre-authorized.** The operator who launched this run has explicitly approved overwriting page `514261050` with the body from Step 7. This is an unattended, non-interactive run: no one can answer a question, so asking "Shall I publish?" ends the session without publishing and fails the run. Never ask for confirmation before this step. The truncation check above is the only gate; if it passes, call `updateConfluencePage` immediately.
+
 Publish only if the body contains all history:
 
 ```
