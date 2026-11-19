@@ -71,7 +71,7 @@ fields: ["summary", "status", "key"]
 maxResults: 30
 ```
 
-This filters by the Dec-Titans (PIF) Atlassian Team field, not by name pattern — it automatically picks up the current quarter's epics without any hardcoded keys. Collect the `key` values of all epics returned and store as `EPIC_KEYS`.
+This filters by the Dec-Titans (PIF) Atlassian Team field, not by name pattern — it automatically picks up the current quarter's epics without any hardcoded keys. Collect the `key` values of all epics returned and store as `EPIC_KEYS`. Also store `EPICS` — the full list of `{key, summary}` for every epic returned (trim leading/trailing whitespace from `summary`). `EPICS` is the source of truth for which rows appear in the final table: **every epic in `EPICS` gets a row, even if it has zero tickets.**
 
 **Print after this step:**
 ```
@@ -108,7 +108,11 @@ For each ticket, extract:
 
 Skip tickets where `issuetype.name` is `"Epic"` or `"Objective"`.
 
-Group by parent epic summary into `TICKETS_BY_EPIC` (a map of epic name → list of tickets). Tickets with no parent go under `"General / Unepic Work"`.
+Group by parent epic into `TICKETS_BY_EPIC` (a map of epic name → list of tickets).
+
+**Seed first, then fill:** before grouping, initialise `TICKETS_BY_EPIC` with one entry for **every** epic in `EPICS` (name = trimmed `summary`, `epic_key` = `key`, `tickets` = `[]`). Then append each ticket to its parent epic's entry (match on `parent.key`). Epics with no tickets stay in the map with an empty `tickets` list — never drop them.
+
+Tickets with no parent go under `"General / Unepic Work"` — add this entry only if it has at least one ticket.
 
 Write `output/tickets_by_epic.json` with this structure:
 ```json
@@ -131,7 +135,7 @@ Write `output/tickets_by_epic.json` with this structure:
 
 **Print after this step:**
 ```
-→ [3/9] Tickets fetched: {total count} across {epic count} epics{" (fallback: no date filter)" if fallback used}
+→ [3/9] Tickets fetched: {total count} across {epics-with-tickets count} of {len(EPICS)} epics{" (fallback: no date filter)" if fallback used}{" | No tickets: " + comma-separated epic keys, if any}
 ```
 
 ---
@@ -177,7 +181,14 @@ Write `output/last_week.json`:
 
 ## Step 5: Synthesize Per-Epic Table Rows — No-Repeat Rule
 
-For each epic in `TICKETS_BY_EPIC`, generate one table row. Use `LAST_WEEK_DATA` to ensure you do not duplicate content from the previous week.
+For each epic in `TICKETS_BY_EPIC` (which contains every epic in `EPICS`, including those with zero tickets), generate one table row. Use `LAST_WEEK_DATA` to ensure you do not duplicate content from the previous week.
+
+**Epics with zero tickets:** still write a row.
+- Progress: `No significant updates this week.`
+- Next Steps: if `PREV` exists, apply the normal next-steps rules to `PREV.next_steps`. If there is no `PREV` (new epic), write `No tickets in {QUARTER_LABEL} yet.`
+- Blockers: carry forward unresolved `PREV.blockers` as `[Ongoing] ...`, otherwise `""`.
+
+**Completeness check:** the number of rows generated MUST equal `len(TICKETS_BY_EPIC)`. If it does not, print `ERROR: epic rows ({rows}) != epics ({epics}) — missing: {keys}` and stop before Step 7.
 
 ### How to apply the no-repeat rule
 
